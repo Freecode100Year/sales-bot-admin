@@ -1,0 +1,4 @@
+.audit_sandbox/
+*.tmp
+.loop_trend.tmp
+.wrangler/

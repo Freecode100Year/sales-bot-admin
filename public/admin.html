@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理后台</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #0f1115; color: #e8e8e8;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 24px; border-bottom: 1px solid #262a33;
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  header button {
+    background: transparent; border: 1px solid #333; color: #999; padding: 6px 14px;
+    border-radius: 6px; cursor: pointer; font-size: 13px;
+  }
+  nav {
+    display: flex; gap: 4px; padding: 12px 24px; border-bottom: 1px solid #262a33;
+    overflow-x: auto;
+  }
+  nav button {
+    background: transparent; border: none; color: #999; padding: 8px 16px;
+    border-radius: 6px; cursor: pointer; font-size: 14px; white-space: nowrap;
+  }
+  nav button.active { background: #1a1d24; color: #5b8cff; font-weight: 600; }
+  main { padding: 24px; max-width: 1000px; margin: 0 auto; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .row {
+    display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;
+  }
+  input, textarea, select {
+    padding: 10px; border-radius: 6px; border: 1px solid #333;
+    background: #1a1d24; color: #e8e8e8; font-size: 13px;
+  }
+  input, select { flex: 1; min-width: 120px; }
+  textarea { width: 100%; min-height: 60px; }
+  button.primary {
+    background: #5b8cff; border: none; color: white; padding: 10px 20px;
+    border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;
+  }
+  button.danger { background: #ff6b6b; }
+  button.secondary { background: #262a33; border: 1px solid #333; color: #e8e8e8; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { text-align: left; padding: 10px; border-bottom: 1px solid #262a33; font-size: 13px; }
+  th { color: #888; font-weight: 500; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px;
+  }
+  .badge.active { background: #1e3a2e; color: #4ade80; }
+  .badge.cooldown { background: #3a331e; color: #fbbf24; }
+  .badge.disabled { background: #3a1e1e; color: #f87171; }
+  .section-title { font-size: 15px; font-weight: 600; margin: 24px 0 12px; color: #ccc; }
+  .hint { color: #777; font-size: 12px; margin-top: -8px; margin-bottom: 12px; }
+  .toast {
+    position: fixed; bottom: 24px; right: 24px; background: #1a1d24; border: 1px solid #333;
+    padding: 12px 20px; border-radius: 8px; font-size: 13px; display: none;
+  }
+  .mt-12 { margin-top: 12px; }
+  .w-full { width: 100%; }
+  #t-status { margin-top: 16px; font-size: 13px; color: #888; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>销售 Bot 管理后台</h1>
+  <button onclick="logout()">退出登录</button>
+</header>
+
+<nav>
+  <button class="tab-btn active" data-tab="products">商品库</button>
+  <button class="tab-btn" data-tab="phrases">短语库</button>
+  <button class="tab-btn" data-tab="keys">API Key</button>
+  <button class="tab-btn" data-tab="conversations">会话上下文</button>
+  <button class="tab-btn" data-tab="telegram">Telegram 接入</button>
+</nav>
+
+<main>
+
+  <!-- ===================== 商品库 ===================== -->
+  <div class="panel active" id="panel-products">
+    <div class="section-title">新增商品</div>
+    <div class="row">
+      <input id="p-name" placeholder="商品名称">
+      <input id="p-category" placeholder="分类">
+      <input id="p-price" type="number" placeholder="价格">
+      <input id="p-stock" type="number" placeholder="库存">
+    </div>
+    <textarea id="p-desc" placeholder="商品描述 (会用于AI回复的语义匹配)"></textarea>
+    <div class="row mt-12">
+      <button class="primary" onclick="createProduct()">添加商品</button>
+    </div>
+    <div class="section-title">商品列表</div>
+    <table>
+      <thead><tr><th>名称</th><th>分类</th><th>价格</th><th>库存</th><th>操作</th></tr></thead>
+      <tbody id="products-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- ===================== 短语库 ===================== -->
+  <div class="panel" id="panel-phrases">
+    <div class="section-title">新增话术模板</div>
+    <div class="row">
+      <input id="ph-intent" placeholder="意图标签 (如 greeting / price_inquiry)">
+    </div>
+    <textarea id="ph-text" placeholder="模板文本，可用 {变量名} 占位"></textarea>
+    <div class="row mt-12">
+      <button class="primary" onclick="createPhrase()">添加模板</button>
+    </div>
+    <div class="section-title">话术列表</div>
+    <table>
+      <thead><tr><th>意图</th><th>模板</th><th>操作</th></tr></thead>
+      <tbody id="phrases-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- ===================== API Key ===================== -->
+  <div class="panel" id="panel-keys">
+    <div class="section-title">新增 API Key</div>
+    <div class="hint">Key 一旦提交将被加密存储，页面不会再显示明文，如需更换请删除后重新添加。</div>
+    <div class="row">
+      <select id="k-provider">
+        <option value="anthropic">Anthropic</option>
+        <option value="openai">OpenAI</option>
+        <option value="other">其他</option>
+      </select>
+      <input id="k-label" placeholder="备注名 (如 账号A)">
+      <input id="k-quota" type="number" placeholder="配额上限 (0=不限)">
+    </div>
+    <input id="k-value" type="password" placeholder="API Key 明文 (仅本次提交使用，不会回显)" class="w-full">
+    <div class="row mt-12">
+      <button class="primary" onclick="createKey()">添加 Key</button>
+    </div>
+    <div class="section-title">Key 池状态</div>
+    <table>
+      <thead><tr><th>Provider</th><th>备注</th><th>状态</th><th>用量/配额</th><th>操作</th></tr></thead>
+      <tbody id="keys-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- ===================== 会话上下文 ===================== -->
+  <div class="panel" id="panel-conversations">
+    <div class="section-title">最近会话 (最多200条)</div>
+    <div class="row">
+      <select id="c-platform">
+        <option value="">全部平台</option>
+        <option value="telegram">Telegram</option>
+        <option value="whatsapp">WhatsApp</option>
+      </select>
+      <button class="secondary" onclick="loadConversations()">刷新</button>
+    </div>
+    <table>
+      <thead><tr><th>用户ID</th><th>平台</th><th>最近更新</th><th>操作</th></tr></thead>
+      <tbody id="conversations-tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- ===================== Telegram 接入 ===================== -->
+  <div class="panel" id="panel-telegram">
+    <div class="section-title">Telegram Bot 配置</div>
+    <div class="hint">Token 提交后会自动调用 Telegram setWebhook，请先创建 Worker/Pages 部署完成后再填写 webhook 地址。</div>
+    <div class="row">
+      <input id="t-token" type="password" placeholder="Bot Token (来自 @BotFather)">
+    </div>
+    <div class="row">
+      <input id="t-webhook" placeholder="Webhook 地址 (如 https://yourdomain.pages.dev/webhook/telegram)">
+    </div>
+    <div class="row">
+      <button class="primary" onclick="saveTelegramConfig()">保存并设置 Webhook</button>
+      <button class="secondary" onclick="testTelegram()">测试连接</button>
+    </div>
+    <div id="t-status"></div>
+  </div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============== 通用工具 ==============
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', 2500);
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+  });
+  if (res.status === 401) {
+    window.location.href = '/index.html';
+    throw new Error('未登录');
+  }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || '请求失败');
+  return data;
+}
+
+function logout() {
+  api('/api/auth/logout', { method: 'POST' }).then(() => window.location.href = '/index.html');
+}
+
+// ============== Tab 切换 ==============
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+    loadTab(btn.dataset.tab);
+  });
+});
+
+function loadTab(tab) {
+  if (tab === 'products') loadProducts();
+  if (tab === 'phrases') loadPhrases();
+  if (tab === 'keys') loadKeys();
+  if (tab === 'conversations') loadConversations();
+  if (tab === 'telegram') loadTelegramStatus();
+}
+
+// ============== 商品库 ==============
+async function loadProducts() {
+  const data = await api('/api/products');
+  const tbody = document.getElementById('products-tbody');
+  tbody.innerHTML = data.products.map(p => `
+    <tr>
+      <td>${escapeHtml(p.name)}</td>
+      <td>${escapeHtml(p.category || '-')}</td>
+      <td>¥${p.price}</td>
+      <td>${p.stock}</td>
+      <td><button class="secondary" onclick="deleteProduct('${p.id}')">删除</button></td>
+    </tr>
+  `).join('');
+}
+
+async function createProduct() {
+  const name = document.getElementById('p-name').value;
+  const category = document.getElementById('p-category').value;
+  const price = parseFloat(document.getElementById('p-price').value) || 0;
+  const stock = parseInt(document.getElementById('p-stock').value) || 0;
+  const description = document.getElementById('p-desc').value;
+
+  if (!name) return showToast('请填写商品名称');
+
+  try {
+    await api('/api/products', { method: 'POST', body: JSON.stringify({ name, category, price, stock, description }) });
+    document.getElementById('p-name').value = '';
+    document.getElementById('p-category').value = '';
+    document.getElementById('p-price').value = '';
+    document.getElementById('p-stock').value = '';
+    document.getElementById('p-desc').value = '';
+    showToast('添加成功');
+    loadProducts();
+  } catch (e) {
+    showToast(e.message);
+  }
+}
+
+async function deleteProduct(id) {
+  if (!confirm('确认删除该商品？')) return;
+  await api('/api/products?id=' + id, { method: 'DELETE' });
+  loadProducts();
+}
+
+// ============== 短语库 ==============
+async function loadPhrases() {
+  const data = await api('/api/phrases');
+  const tbody = document.getElementById('phrases-tbody');
+  tbody.innerHTML = data.phrases.map(p => `
+    <tr>
+      <td>${escapeHtml(p.intent_tag)}</td>
+      <td>${escapeHtml(p.template_text)}</td>
+      <td><button class="secondary" onclick="deletePhrase('${p.id}')">删除</button></td>
+    </tr>
+  `).join('');
+}
+
+async function createPhrase() {
+  const intent_tag = document.getElementById('ph-intent').value;
+  const template_text = document.getElementById('ph-text').value;
+  if (!intent_tag || !template_text) return showToast('请填写完整');
+
+  try {
+    await api('/api/phrases', { method: 'POST', body: JSON.stringify({ intent_tag, template_text }) });
+    document.getElementById('ph-intent').value = '';
+    document.getElementById('ph-text').value = '';
+    showToast('添加成功');
+    loadPhrases();
+  } catch (e) {
+    showToast(e.message);
+  }
+}
+
+async function deletePhrase(id) {
+  if (!confirm('确认删除该模板？')) return;
+  await api('/api/phrases?id=' + id, { method: 'DELETE' });
+  loadPhrases();
+}
+
+// ============== API Key ==============
+async function loadKeys() {
+  const data = await api('/api/keys');
+  const tbody = document.getElementById('keys-tbody');
+  tbody.innerHTML = data.keys.map(k => `
+    <tr>
+      <td>${escapeHtml(k.provider)}</td>
+      <td>${escapeHtml(k.label || '-')}</td>
+      <td><span class="badge ${k.status}">${k.status}</span></td>
+      <td>${k.used_count} / ${k.quota_limit || '∞'}</td>
+      <td>
+        <button class="secondary" onclick="resetKey('${k.id}')">重置计数</button>
+        <button class="secondary" onclick="toggleKeyStatus('${k.id}', '${k.status}')">${k.status === 'disabled' ? '启用' : '禁用'}</button>
+        <button class="secondary" onclick="deleteKey('${k.id}')">删除</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function createKey() {
+  const provider = document.getElementById('k-provider').value;
+  const label = document.getElementById('k-label').value;
+  const quota_limit = parseInt(document.getElementById('k-quota').value) || 0;
+  const api_key = document.getElementById('k-value').value;
+
+  if (!api_key) return showToast('请填写 API Key');
+
+  try {
+    await api('/api/keys', { method: 'POST', body: JSON.stringify({ provider, label, api_key, quota_limit }) });
+    document.getElementById('k-label').value = '';
+    document.getElementById('k-quota').value = '';
+    document.getElementById('k-value').value = '';
+    showToast('Key 已加密保存');
+    loadKeys();
+  } catch (e) {
+    showToast(e.message);
+  }
+}
+
+async function resetKey(id) {
+  await api('/api/keys/reset', { method: 'POST', body: JSON.stringify({ id }) });
+  showToast('已重置');
+  loadKeys();
+}
+
+async function toggleKeyStatus(id, currentStatus) {
+  const newStatus = currentStatus === 'disabled' ? 'active' : 'disabled';
+  await api('/api/keys', { method: 'PUT', body: JSON.stringify({ id, status: newStatus }) });
+  loadKeys();
+}
+
+async function deleteKey(id) {
+  if (!confirm('确认删除该 Key？此操作不可恢复。')) return;
+  await api('/api/keys?id=' + id, { method: 'DELETE' });
+  loadKeys();
+}
+
+// ============== 会话上下文 ==============
+async function loadConversations() {
+  const platform = document.getElementById('c-platform').value;
+  const data = await api('/api/conversations' + (platform ? '?platform=' + platform : ''));
+  const tbody = document.getElementById('conversations-tbody');
+  tbody.innerHTML = data.conversations.map(c => `
+    <tr>
+      <td>${escapeHtml(c.user_id)}</td>
+      <td>${escapeHtml(c.platform)}</td>
+      <td>${new Date(c.updated_at * 1000).toLocaleString('zh-CN')}</td>
+      <td><button class="secondary" onclick="clearConversation('${c.user_id}', '${c.platform}')">清除</button></td>
+    </tr>
+  `).join('');
+}
+
+async function clearConversation(userId, platform) {
+  if (!confirm('确认清除该用户的会话上下文？')) return;
+  await api(`/api/conversations?user_id=${encodeURIComponent(userId)}&platform=${platform}`, { method: 'DELETE' });
+  loadConversations();
+}
+
+// ============== Telegram 接入 ==============
+async function loadTelegramStatus() {
+  const data = await api('/api/telegram');
+  const el = document.getElementById('t-status');
+  if (data.config) {
+    el.innerHTML = `当前状态: <span class="badge active">${data.config.status}</span> · Webhook: ${escapeHtml(data.config.webhook_url)}`;
+  } else {
+    el.textContent = '尚未配置';
+  }
+}
+
+async function saveTelegramConfig() {
+  const token = document.getElementById('t-token').value;
+  const webhook_url = document.getElementById('t-webhook').value;
+  if (!token || !webhook_url) return showToast('请填写完整');
+
+  try {
+    await api('/api/telegram', { method: 'POST', body: JSON.stringify({ token, webhook_url }) });
+    document.getElementById('t-token').value = '';
+    showToast('配置成功，Webhook 已设置');
+    loadTelegramStatus();
+  } catch (e) {
+    showToast(e.message);
+  }
+}
+
+async function testTelegram() {
+  try {
+    const data = await api('/api/telegram/test', { method: 'POST', body: '{}' });
+    showToast('连接成功: @' + data.bot.username);
+  } catch (e) {
+    showToast(e.message);
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str ?? '';
+  return div.innerHTML;
+}
+
+// ============== 初始加载 ==============
+loadProducts();
+</script>
+</body>
+</html>

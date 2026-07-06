@@ -1,0 +1,14 @@
+name = "sales-bot-admin"
+pages_build_output_dir = "public"
+compatibility_date = "2026-01-01"
+
+# D1 数据库绑定
+[[d1_databases]]
+binding = "DB"
+database_name = "sales-bot-db"
+database_id = "e322f65a-be20-4b42-a7e8-cbf97865d67f"
+
+# 以下为 Secrets，不要写在这里，用 wrangler pages secret put 命令设置：
+#   wrangler pages secret put ADMIN_PASSWORD
+#   wrangler pages secret put JWT_SECRET
+#   wrangler pages secret put MASTER_SECRET
