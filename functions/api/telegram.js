@@ -1,8 +1,4 @@
-import { encryptSecret, decryptSecret } from "../_lib/crypto.js";
-
-// /api/telegram/config  POST { token, webhook_url } -> 加密保存并自动调用 setWebhook
-// /api/telegram/status  GET  -> 返回当前绑定状态 (不含明文token)
-// /api/telegram/test    POST -> 用已保存的token调用 getMe 验证有效性
+import { encryptSecret } from "../_lib/crypto.js";
 
 export async function onRequestGet(context) {
   const { env } = context;
@@ -11,26 +7,6 @@ export async function onRequestGet(context) {
   ).first();
 
   return Response.json({ config: row || null });
-}
-
-async function handleTestTelegram(env) {
-  const row = await env.DB.prepare(
-    `SELECT token_ciphertext, token_iv FROM bot_configs WHERE platform = 'telegram'`
-  ).first();
-
-  if (!row) {
-    return Response.json({ error: "尚未配置 Telegram Token" }, { status: 400 });
-  }
-
-  const token = await decryptSecret(row.token_ciphertext, row.token_iv, env.MASTER_SECRET);
-  const res = await fetch(`https://api.telegram.org/bot${token}/getMe`);
-  const data = await res.json();
-
-  if (!data.ok) {
-    return Response.json({ error: "Token 无效", detail: data.description }, { status: 400 });
-  }
-
-  return Response.json({ ok: true, bot: data.result });
 }
 
 async function setTelegramWebhook(token, webhook_url) {
@@ -57,7 +33,8 @@ async function saveBotConfig(db, ciphertext, iv, webhook_url) {
     .run();
 }
 
-async function handleSaveTelegram(request, env) {
+export async function onRequestPost(context) {
+  const { request, env } = context;
   const body = await request.json().catch(() => ({}));
   const { token, webhook_url } = body;
 
@@ -80,14 +57,4 @@ async function handleSaveTelegram(request, env) {
   await saveBotConfig(env.DB, ciphertext, iv, webhook_url);
 
   return Response.json({ ok: true });
-}
-
-export async function onRequestPost(context) {
-  const { request, env } = context;
-  const url = new URL(request.url);
-
-  if (url.pathname.endsWith("/test")) {
-    return handleTestTelegram(env);
-  }
-  return handleSaveTelegram(request, env);
 }
