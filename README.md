@@ -2,6 +2,19 @@
 
 ## 📢 更新日志 (Latest Updates)
 
+### [2026-07-06] - 路由 Bug 修复与子路由重构
+- **🐛 修正的 Bug**：
+  - **修复了登录时报错“网络错误，请重试”的问题**：由于 Cloudflare Pages 路由采用严格的文件/目录匹配机制，原本的单文件 `functions/api/auth.js` 内部匹配 `/api/auth/login` 与 `/api/auth/logout` 导致 Cloudflare Pages 无法匹配对应文件，直接返回了 `405 Method Not Allowed`。
+  - **修复了 API Key 重置和 Bot 测试连接的潜在 405 路由缺陷**：修复了原本 `/api/keys/reset` 与 `/api/telegram/test` 子路由的匹配缺陷。
+- **✅ 解决方案（代码重构）**：
+  - 彻底拆分子路由，新建并分配了对应的单职责端点文件：
+    - [login.js] 处理登录。
+    - [logout.js] 处理登出。
+    - [reset.js] 处理 Key 计数重置。
+    - [test.js] 处理 Bot 连接测试。
+  - 重构了 [keys.js] 与 [telegram.js]，移除多余的子路径分发逻辑，使它们完美符合 RESTful API 范式。
+  - 全新重构后，所有 JS 文件中的单个函数体大小依旧严格控制在 **30行以内**，并通过 [check.js] 审计校验。
+
 ### [2026-07-06] - 审计重构与 Cloudflare 部署
 - **✅ 代码审计与规范对齐**：
   - 对 `functions` 下的所有 API 和 Webhook 文件（包括 `auth.js`、`keys.js`、`telegram.js` 及 `webhook/telegram.js`）进行了模块化函数拆分重构，确保任何单一函数体严格控制在 **30行以内**。
