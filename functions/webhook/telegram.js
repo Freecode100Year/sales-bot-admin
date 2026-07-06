@@ -1,10 +1,43 @@
 import { decryptSecret } from "../_lib/crypto.js";
 
-// POST /webhook/telegram
-// Telegram 直接调用此端点，不经过 /api/* 的登录中间件
-//
-// 这是最小可运行骨架，生产环境请把 "取key/计数" 部分换成 Durable Object KeyPool
-// 以避免高并发下的计数竞态 (骨架里为了先跑通，直接查 D1 取第一个 active key)
+const PROVIDERS_CONFIG = {
+  openai: {
+    url: "https://api.openai.com/v1/chat/completions",
+    model: "gpt-4o-mini"
+  },
+  openrouter: {
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    model: "meta-llama/llama-3.1-70b-instruct"
+  },
+  nous_portal: {
+    url: "https://api.nousresearch.com/v1/chat/completions",
+    model: "nous-hermes-2-mixtral-8x7b-dpo"
+  },
+  google: {
+    url: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+    model: "gemini-1.5-flash"
+  },
+  zhipu: {
+    url: "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+    model: "glm-4-flash"
+  },
+  moonshot: {
+    url: "https://api.moonshot.cn/v1/chat/completions",
+    model: "moonshot-v1-8k"
+  },
+  minimax: {
+    url: "https://api.minimax.chat/v1/chat/completions",
+    model: "abab6.5g-chat"
+  },
+  xai: {
+    url: "https://api.x.ai/v1/chat/completions",
+    model: "grok-beta"
+  },
+  ollama: {
+    url: "http://localhost:11434/v1/chat/completions",
+    model: "llama3"
+  }
+};
 
 async function getBotToken(db, masterSecret) {
   const botRow = await db.prepare(
@@ -25,13 +58,13 @@ async function getConversationHistory(db, userId) {
 
 async function getAvailableApiKey(db, masterSecret) {
   const keyRow = await db.prepare(
-    `SELECT id, key_ciphertext, key_iv, used_count, quota_limit FROM api_keys
-     WHERE provider = 'anthropic' AND status = 'active'
+    `SELECT id, provider, key_ciphertext, key_iv, used_count, quota_limit FROM api_keys
+     WHERE status = 'active'
      ORDER BY used_count ASC LIMIT 1`
   ).first();
   if (!keyRow) return null;
   const key = await decryptSecret(keyRow.key_ciphertext, keyRow.key_iv, masterSecret);
-  return { id: keyRow.id, key };
+  return { id: keyRow.id, provider: keyRow.provider, key };
 }
 
 async function callAnthropicAPI(apiKey, history, userText) {
@@ -57,6 +90,41 @@ async function callAnthropicAPI(apiKey, history, userText) {
   } catch (e) {
     return "抱歉，暂时无法处理，请稍后再试。";
   }
+}
+
+async function callOpenAICompatibleAPI(url, model, apiKey, history, userText) {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          ...history,
+          { role: "user", content: userText }
+        ],
+        max_tokens: 500
+      })
+    });
+    const data = await res.json();
+    return data?.choices?.[0]?.message?.content || "抱歉，我没理解，能再说一次吗？";
+  } catch (e) {
+    return "抱歉，暂时无法处理，请稍后再试。";
+  }
+}
+
+async function callLLM(provider, apiKey, history, userText) {
+  if (provider === "anthropic") {
+    return callAnthropicAPI(apiKey, history, userText);
+  }
+  const conf = PROVIDERS_CONFIG[provider];
+  if (!conf) {
+    return "未知的 AI 平台服务商，请在后台配置支持的平台。";
+  }
+  return callOpenAICompatibleAPI(conf.url, conf.model, apiKey, history, userText);
 }
 
 async function updateApiKeyUsage(db, keyId) {
@@ -111,7 +179,7 @@ export async function onRequestPost(context) {
     return new Response("ok");
   }
 
-  const replyText = await callAnthropicAPI(keyInfo.key, history, userText);
+  const replyText = await callLLM(keyInfo.provider, keyInfo.key, history, userText);
   await updateApiKeyUsage(env.DB, keyInfo.id);
   await updateConversationHistory(env.DB, userId, history, userText, replyText);
   await sendTelegramMessage(botToken, chatId, replyText);
