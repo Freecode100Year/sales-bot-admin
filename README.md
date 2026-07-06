@@ -1,5 +1,23 @@
 # 销售 Bot 管理后台 — 代码骨架
 
+## 📢 更新日志 (Latest Updates)
+
+### [2026-07-06] - 审计重构与 Cloudflare 部署
+- **✅ 代码审计与规范对齐**：
+  - 对 `functions` 下的所有 API 和 Webhook 文件（包括 `auth.js`、`keys.js`、`telegram.js` 及 `webhook/telegram.js`）进行了模块化函数拆分重构，确保任何单一函数体严格控制在 **30行以内**。
+  - 剥离了 `public/admin.html` 里面的所有硬编码内联样式（`style="..."`），抽离到内部 CSS 样式表中，确保 **HTML 零内联样式**。
+  - 编写了自动化静态审计工具 `check.js`，可本地一键验证 JS 语法、函数行数上限及 HTML 内联样式合规性。
+- **🚀 自动驾驶 Loop 验证**：
+  - 引入了 `loop-runner` 闭环开发工具链，并通过 `00_Loop_Memory/Loop_Contracts.md` 校验。
+- **☁️ Cloudflare Pages & D1 部署**：
+  - 完成了 Cloudflare D1 数据库 `sales-bot-db` 的创建与初始化。
+  - 完成了 Cloudflare Pages 项目 `sales-bot-admin` 的部署，支持 Pages Functions 自动运行。
+  - 成功配置了安全密钥（Secrets）：`ADMIN_PASSWORD`、`JWT_SECRET`、`MASTER_SECRET`。
+- **🌐 GitHub 仓库开源**：
+  - 仓库已推送到 GitHub 公开仓库：[sales-bot-admin](https://github.com/Freecode100Year/sales-bot-admin)
+
+---
+
 Cloudflare Pages + Functions + D1，用于管理 Telegram/WhatsApp 销售机器人的商品库、话术库、API Key 池和会话上下文。
 
 ## 目录结构
